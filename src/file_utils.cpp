@@ -1,6 +1,8 @@
+#include "./headers/file_utils.h"
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <vector>
 #include <sys/stat.h>
 #include <sys/types.h>
 
@@ -61,24 +63,54 @@ void copy_directory(const std::string &source, const std::string &destination) {
     FindClose(hFind);
 }
 
-int main(int argc, char* argv[]) {
-    if (argc < 2) {
-        std::cerr << "Correct Usage:\n'sprout {starter}'\nExample: 'sprout express'" << std::endl;
-        return 1;
+void delete_directory(const std::string &directory) {
+    WIN32_FIND_DATAA find_file_data;
+    HANDLE hFind = FindFirstFileA((directory + "\\*").c_str(), &find_file_data);
+
+    if (hFind == INVALID_HANDLE_VALUE) {
+        throw std::runtime_error("Failed to open directory");
     }
-    
 
-    std::string source_relative_path(argv[1]);
-    std::string destination_path = "./";
+    do {
+        const std::string file_name = find_file_data.cFileName;
+        if (file_name == "." || file_name == "..") continue;
 
-    try {
-        std::string exe_path = get_executable_path();
-        std::string source_path = exe_path + PATH_SEPARATOR + source_relative_path;
+        const std::string full_path = directory + "\\" + file_name;
 
-        copy_directory(source_path, destination_path);
-        return 0;
-    } catch (const std::exception &e) {
-        std::cerr << "Error: " << e.what() << std::endl;
-        return 1;
+        if (find_file_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            delete_directory(full_path);
+        } else {
+            if (!DeleteFileA(full_path.c_str())) {
+                throw std::runtime_error("Failed to delete file: " + full_path);
+            }
+        } 
+    } while (FindNextFileA(hFind, &find_file_data) != 0);
+    FindClose(hFind);
+
+    if (!RemoveDirectoryA(directory.c_str())) {
+        throw std::runtime_error("Failed to remove directory: " + directory);
     }
+}
+
+std::vector<std::string> list_folders(const std::string &directory) {
+    std::vector<std::string> folders;
+
+    WIN32_FIND_DATAA find_file_data;
+    HANDLE hFind = FindFirstFileA((directory + "\\*").c_str(), &find_file_data);
+
+    if (hFind == INVALID_HANDLE_VALUE) {
+        throw std::runtime_error("Failed to open directory");
+    }
+
+    do {
+        const std::string file_name = find_file_data.cFileName;
+        if (file_name == "." || file_name == "..") continue;
+
+        if (find_file_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            folders.push_back(file_name);
+        }
+    } while (FindNextFileA(hFind, &find_file_data) != 0);
+    FindClose(hFind);
+
+    return folders;
 }
